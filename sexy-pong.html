@@ -1,0 +1,444 @@
+<!DOCTYPE html>
+<!-- This is a single-file portable game. The only external references are to media files such as images and sounds. -->
+<!-- All external references are configurable to allow manipulation -->
+<!-- Only base game code and styles are compressed to decrease file size. -->
+<!-- The project uncompressed source will be available at https://github.com/datadink -->
+<html>
+	<head>
+		<style type="text/css">
+			html { width: 100%; height: 100%; position: absolute; padding: 0px; margin: 0px; }
+			body { width: 100%; height: 100%; position: absolute; padding: 0px; margin: 0px; display: block; }
+			#game-container { width: 300px; height: 300px; position: absolute; padding: 0px; margin: auto; left: 0px; right: 0px; top: 0px; bottom: 0px; overflow: hidden; cursor: none; }
+			#game-container > * { position: absolute; margin: 0px; padding: 0px; display: none; }
+			
+			#ball { width: 50px; height: 50px; background: blue; }
+			#paddle-left, #paddle-right { width: 25px; height: 25%; }
+			#paddle-top, #paddle-bottom { width: 25%; height: 25px; }
+			.computer { background: red; }
+			.player { background: green; }
+			
+			#load-screen { display: block; width: 100%; height: 100%; }
+			#load-screen * { display: block; position: absolute; text-align: center; top: 0px; bottom: 0px; right: 0px; left: 0px; height: 25px; margin: auto; }
+
+			#start-screen { width: 100%; height: 100%; cursor: pointer; }
+			#logo { width: 100%; height: 100px; position: absolute; text-align: center; top: 0px; bottom: 0px; right; 0px; left; 0px; margin: auto; }
+			#start-button { width: 100px; height: 25px; position: absolute; text-align: center; left: 0px; right: 0px; bottom: 100px; margin: auto; }
+			
+			#round-screen { display: block; position: absolute; width: 100%; height: 100%; }
+			#round-screen * { display: block; position: absolute; left: 0px; right: 0px; top: 0px; bottom: 0px; margin: auto; width: 150px; height: 150px; font-size: 150px; text-align: center; padding: 0px; }
+			
+			#computer-ui { position: absolute; left: 35px; top : 35px; }
+			#player-ui { position: absolute; right: 35px; bottom: 35px; }
+			#computer-ui *, #player-ui * { display: inline-block; }
+		</style>
+	</head>
+	<body>
+		
+		<div id="game-container">
+			
+			<div id="computer-ui">Computer's Score: <div id="computer-score">0</div></div>
+			<div id="player-ui">Your Score: <div id="player-score">0</div></div>
+			
+			<div id="ball"></div>
+			<div id="paddle-left" class="computer"></div>
+			<div id="paddle-right" class="player"></div>
+			<div id="paddle-top" class="computer"></div>
+			<div id="paddle-bottom" class="player"></div>
+			
+			<div id="round-screen"><h1 class="hidden" style="display: none;">3</h1><h1 class="hidden" style="display: none;">2</h1><h1 class="hidden" style="display: none;">1</h1></div>
+			<div id="point-screen"><h1 class="hidden"></h1></div>
+			<div id="start-screen"><h1 id="logo">Sexy Pong</h1><div id="start-button">-start game-</div></div>
+			<div id="load-screen"><h1>Loading...</h1></div>
+		
+			<div id="sounds">
+				<div id="computer-point-sounds">
+					<!-- Put audio tags in here -->
+				</div>
+				<div id="player-point-sounds">
+					<!-- Put audio tags in here -->
+				</div>
+				<div id="computer-hit-sounds">
+					<!-- Put audio tags in here -->
+				</div>
+				<div id="player-hit-sounds">
+					<!-- Put audio tags in here -->
+				</div>
+			</div>
+		</div>
+		
+		<script type="text/javascript">
+			(function() { // scope
+				// settings
+				var gutterSize = 30;
+				var gameSpeed = .003; 
+				var speedPerLevel = .00001; 
+				var computerHandicap = 2;
+			
+				// elements
+				var container = document.getElementById('game-container');
+				var startScr = document.getElementById('start-screen');
+				var loadScr = document.getElementById('load-screen');
+				var startBtn = document.getElementById('start-button');
+				var roundScr = document.getElementById('round-screen');
+				
+				var compUi = document.getElementById('computer-ui');
+				var playerUi = document.getElementById('player-ui');
+				var compUiScore = document.getElementById('computer-score');
+				var plrUiScore = document.getElementById('player-score');
+				
+				var ball = document.getElementById('ball');
+				var paddleLeft = document.getElementById('paddle-left');
+				var paddleRight = document.getElementById('paddle-right');
+				var paddleTop = document.getElementById('paddle-top');
+				var paddleBottom = document.getElementById('paddle-bottom');
+				var playerPaddles = [];
+				var computerPaddles = [];
+				
+				var soundsCmpPoint = document.getElementById('computer-point-sounds');
+				var soundsPlrPoint = document.getElementById('player-point-sounds');
+				var soundsCmpHit = document.getElementById('computer-hit-sounds');
+				var soundsPlrHit = document.getElementById('player-hit-sounds');
+			
+				// game values
+				var computerScore = 0;
+				var playerScore = 0;
+				var ballPosition = { x: .5, y: .5, d: 0 };
+				var mousePosition = { x: 0, y: 0 };
+				var gameLoop;
+				
+				// init
+				setTimeout(function() {
+					startScr.style.display = 'block';
+					loadScr.style.display = 'none';
+					startBtn.addEventListener('click', startGame);
+				}, 1000);
+				
+				function startGame() {
+					startScr.style.display = 'none';
+					initPaddle(paddleLeft);
+					initPaddle(paddleRight);
+					initPaddle(paddleTop);
+					initPaddle(paddleBottom);
+					initUI(compUi);
+					initUI(playerUi);
+					
+					container.addEventListener('mousemove', updateMouse);
+					startRound();
+				}
+				
+				var handicapCounter = 0;
+				function startRound() {
+					clearInterval(gameLoop);
+					for (var i = 0; i < computerPaddles.length; i++) {
+						var paddle = computerPaddles[i];
+						var bounds = getElementBounds(paddle);
+						if (isPaddleHorz(paddle)) {
+							paddle.style.left = (getGameBounds().width / 2 - bounds.width / 2) + 'px';
+						} else {
+							paddle.style.top = (getGameBounds().height / 2 - bounds.height / 2) + 'px';
+						}
+					}
+					countDown(function() {
+						initBall();
+						
+						gameLoop = setInterval(function() {
+							updateBall();
+							
+							if (handicapCounter++ > computerHandicap) {
+								handicapCounter = 0;
+								for (var i = 0; i < computerPaddles.length; i++) {
+									updateComputerPaddle(computerPaddles[i]);
+								}
+							}
+							if (checkPoint()) {
+								updateScores();
+								startRound();
+							}
+						}, 10);
+					});
+				}
+				
+				function countDown(callback) {
+					var timeout = 1000;
+					var nodes = [];
+					
+					for (var i = 0; i < roundScr.childNodes.length; i++) {
+						nodes.push(roundScr.childNodes[i]);
+						setTimeout(function() {
+							var node = nodes.shift();
+							node.style.display = '';
+							node.className = '';
+							setTimeout(function() { node.className = 'hidden'; node.style.display = 'none'; }, 1000);
+						}, timeout);
+						timeout += 1000;
+					}
+					setTimeout(callback, timeout);
+				}
+				
+				function initUI(ui) {
+					ui.style.display = 'block';
+				}
+				
+				function updateScores() {
+					compUiScore.innerHTML = '';
+					compUiScore.appendChild(document.createTextNode(computerScore));
+					plrUiScore.innerHTML = '';
+					plrUiScore.appendChild(document.createTextNode(playerScore));
+				}
+				
+				function initPaddle(paddle) {
+					if (!paddle) { return; }
+					paddle.style.display = 'block';
+					paddle.gameData = {
+						wall: paddle.id.substr('paddle-'.length).toLowerCase(),
+						controller: (' ' + paddle.className + ' ').toLowerCase().indexOf(' player ') >= 0 ? 'player' : 'computer'
+					}
+					var bounds = getElementBounds(paddle);
+					if (paddle.gameData.wall === 'left') {
+						paddle.style.right = 'auto';
+						paddle.style.bottom = 'auto';
+						paddle.style.left = (gutterSize - bounds.width) + 'px';
+					} else if (paddle.gameData.wall === 'right') {
+						paddle.style.left = 'auto';
+						paddle.style.bottom = 'auto';
+						paddle.style.right = (gutterSize - bounds.width) + 'px';
+					} else if (paddle.gameData.wall === 'top') {
+						paddle.style.bottom = 'auto';
+						paddle.style.right = 'auto';
+						paddle.style.top = (gutterSize - bounds.height) + 'px';
+					} else if (paddle.gameData.wall === 'bottom') {
+						paddle.style.top = 'auto';
+						paddle.style.right = 'auto';
+						paddle.style.bottom = (gutterSize - bounds.height) + 'px';
+					}
+					if (paddle.gameData.controller === 'player') { playerPaddles.push(paddle); }
+					if (paddle.gameData.controller === 'computer') { computerPaddles.push(paddle); }
+				}
+				
+				function initBall() {
+					ball.style.display = 'block';
+					ballPosition.d = Math.random() * 360;
+					ballPosition.x = .5;
+					ballPosition.y = .5;
+					plotBall();
+				}
+				
+				function getGameBounds() {
+					var rect = container.getBoundingClientRect();
+					var bounds = {
+						left: rect.left,
+						top: rect.top,
+						right: rect.right,
+						bottom: rect.bottom,
+						width: container.offsetWidth,
+						height: container.offsetHeight
+					};
+					return bounds;
+				}
+				
+				function getElementBounds(element) {
+					var gameRect = container.getBoundingClientRect();
+					var rect = element.getBoundingClientRect();
+					var bounds = {
+						left: rect.left - gameRect.left,
+						top: rect.top - gameRect.top,
+						right: gameRect.right - rect.right,
+						bottom: gameRect.bottom - rect.bottom,
+						width: element.offsetWidth,
+						height: element.offsetHeight
+					};
+					return bounds;
+				}
+				
+				function updateMouse(e) {
+					var bounds = getGameBounds();
+					mousePosition.x = Math.round(e.clientX) - bounds.left; 
+					mousePosition.y = Math.round(e.clientY) - bounds.top; 
+					for (var i = 0; i < playerPaddles.length; i++) { updatePlayerPaddle(playerPaddles[i]); }
+				}
+				
+				function updatePlayerPaddle(paddle) {
+					var bounds = getElementBounds(paddle);
+					
+					if (!isPaddleHorz(paddle)) {
+						paddle.style.top = (mousePosition.y - (bounds.height / 2)) + 'px';
+					} else {
+						paddle.style.left = (mousePosition.x - (bounds.width / 2)) + 'px';
+					}
+				}
+				
+				function updateComputerPaddle(paddle) {
+					// Get ball relevant center
+					var isHorz = isPaddleHorz(paddle);
+					var ballBounds = getElementBounds(ball);
+					var ballCenter = isHorz
+						? ballBounds.left + ballBounds.width / 2
+						: ballBounds.top + ballBounds.height / 2;
+					// Get paddle small edge
+					var paddleBounds = getElementBounds(paddle);
+					var edgeSmall = isHorz
+						? paddleBounds.left
+						: paddleBounds.top;
+					// Get paddle large edge
+					var edgeLarge = isHorz
+						? paddleBounds.left + paddleBounds.width
+						: paddleBounds.top + paddleBounds.height;
+					// Get distance required
+					var isMore = ballCenter > edgeLarge;
+					var isLess = ballCenter < edgeSmall;
+					var distance = isMore
+						? ballCenter - edgeLarge : isLess
+						? edgeSmall - ballCenter : 0;
+					// Calculate against max move distance
+					if (distance === 0) { return; }
+					var maxMove = calcMaxComputerMove();
+					var move = Math.min(isHorz ? maxMove.x : maxMove.y, distance);
+					// subtract for less, add for more
+					if (isLess && isHorz) {
+						paddle.style.left = Math.round(paddleBounds.left - move) + 'px'
+					} else if (isLess && !isHorz) {
+						paddle.style.top = Math.round(paddleBounds.top - move) + 'px'
+					} else if (isMore && isHorz) {
+						paddle.style.left = Math.round(paddleBounds.left + move) + 'px'
+					} else if (isMore && !isHorz) {
+						paddle.style.top = Math.round(paddleBounds.top + move) + 'px'
+					}
+				}
+				
+				function updateBall() {
+					var ballBounds = getElementBounds(ball);
+					var distance = calcBallMove();
+					var plot = calcPlot(ballPosition.d);
+					ballPosition.x += plot.x * distance;
+					ballPosition.y += plot.y * distance;
+					plotBall();
+				}
+				
+				function plotBall() {
+					var ballBounds = getElementBounds(ball);
+					var gameBounds = getGameBounds();
+					var x = gameBounds.width * ballPosition.x - ballBounds.width / 2;
+					var y = gameBounds.height * ballPosition.y - ballBounds.height / 2;
+					ball.style.left = Math.round(x) + 'px';
+					ball.style.top = Math.round(y) + 'px';
+				}
+				
+				function calcLevel() {
+					return Math.max(1, playerScore);
+				}
+				
+				function calcBallMove() {
+					return calcLevel() * speedPerLevel + gameSpeed;
+				}
+				
+				function calcMaxComputerMove() {
+					var bounds = getGameBounds();
+					var multiplier = calcBallMove() * (computerHandicap + 1) * .90;
+					return {
+						x: Math.max(1, Math.round(multiplier * bounds.width)),
+						y: Math.max(1, Math.round(multiplier * bounds.height))
+					};
+				}
+				
+				function isPaddleHorz(paddle) {
+					return paddle.gameData.wall === 'top' || paddle.gameData.wall === 'bottom';
+				}
+				
+				function calcPlot(direction) {
+					var radians = direction / 180 * Math.PI;
+					return {
+						x: Math.cos(radians),
+						y: Math.sin(radians)
+					};
+				}
+				
+				function calcDirection(plot) {
+					return Math.atan2(plot.y, plot.x) * 180 / Math.PI;
+				}
+				
+				function checkPoint() {
+					var ballBounds = getElementBounds(ball);
+					
+					var paddles = [ paddleLeft, paddleTop, paddleRight, paddleBottom ];
+					if (ballBounds.left <= 0) {
+						return handleWall(paddleLeft);
+					}
+					if (ballBounds.top <= 0) {
+						return handleWall(paddleTop);
+					}
+					if (ballBounds.right <= 0) {
+						return handleWall(paddleRight);
+					}
+					if (ballBounds.bottom <= 0) {
+						return handleWall(paddleBottom);
+					}
+					
+					for (var i = 0; i < paddles.length; i++) {
+						var paddle = paddles[i];
+						if (!paddle) { continue; }
+						var paddleBounds = getElementBounds(paddle);
+						
+						var vertTouch = ballBounds.left < paddleBounds.left + paddleBounds.width && ballBounds.left + ballBounds.width > paddleBounds.left;
+						var horzTouch = ballBounds.top < paddleBounds.top + paddleBounds.height && ballBounds.top + ballBounds.height > paddleBounds.top;
+						if (vertTouch && horzTouch) {
+							bounceBall(paddle);
+							return false;
+						}
+					}
+				}
+				
+				function handleWall(paddle) {
+					if (paddle) {
+						if (paddle.gameData.controller === 'player') { computerScore++; }
+						else { playerScore++; }
+						playPointSound(paddle);
+						return true;
+					}
+					var plot = calcPlot(ballPosition.d);
+					if (!isPaddleHorz(paddle)) {
+						ballPosition.d = calcDirection({x: -plot.x, y: plot.y});
+					} else {
+						ballPosition.d = calcDirection({x: plot.x, y: -plot.y});
+					}
+				}
+				
+				function bounceBall(paddle) {
+					var paddleBounds = getElementBounds(paddle);
+					var paddlePlot = { x: paddleBounds.left + paddleBounds.width / 2, y: paddleBounds.top + paddleBounds.height / 2 };
+					var ballBounds = getElementBounds(ball);
+					var ballPlot = { x: ballBounds.left + ballBounds.width / 2, y: ballBounds.top + ballBounds.height / 2 };
+					var direction = calcDirection({x: paddlePlot.x - ballPlot.x, y: paddlePlot.y - ballPlot.y});
+					ballPosition.d = direction + 180;
+					playHitSound(paddle);
+				}
+				
+				function playPointSound(paddle) {
+					var src = paddle.gameData.controller === 'player'
+						? soundsPlrPoint : soundsCmpPoint;
+					pickAndPlaySound(src);
+				}
+				
+				function playHitSound(paddle) {
+					var src = paddle.gameData.controller === 'player'
+						? soundsPlrHit : soundsCmpHit;
+					pickAndPlaySound(src);
+				}
+				
+				function pickAndPlaySound(source) {
+					if (!source || source.childNodes.length === 0) { return; }
+					var sounds = [];
+					for (var i = 0; i < source.childNodes.length; i++) {
+						if (source.childNodes[i].tagName && source.childNodes[i].tagName.toLowerCase() === 'audio') { sounds.push(source.childNodes[i]); }
+					}
+					if (sounds.length === 0) { return; } 
+					
+					var index = Math.round(Math.random() * (sounds.length - 1));
+					var sound = sounds[index];
+					sound.play();
+				}
+				
+			})();
+		
+		</script>
+	</body>
+</html>
