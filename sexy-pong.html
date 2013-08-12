@@ -70,9 +70,9 @@
 			(function() { // scope
 				// settings
 				var gutterSize = 30;
-				var gameSpeed = .003; 
-				var speedPerLevel = .00001; 
-				var computerHandicap = 2;
+				var gameSpeed = .01; 
+				var speedPerLevel = .000007; 
+				var computerHandicap = .55;
 			
 				// elements
 				var container = document.getElementById('game-container');
@@ -144,11 +144,8 @@
 						gameLoop = setInterval(function() {
 							updateBall();
 							
-							if (handicapCounter++ > computerHandicap) {
-								handicapCounter = 0;
-								for (var i = 0; i < computerPaddles.length; i++) {
-									updateComputerPaddle(computerPaddles[i]);
-								}
+							for (var i = 0; i < computerPaddles.length; i++) {
+								updateComputerPaddle(computerPaddles[i]);
 							}
 							if (checkPoint()) {
 								updateScores();
@@ -333,7 +330,7 @@
 				
 				function calcMaxComputerMove() {
 					var bounds = getGameBounds();
-					var multiplier = calcBallMove() * (computerHandicap + 1) * .90;
+					var multiplier = calcBallMove() * computerHandicap;
 					return {
 						x: Math.max(1, Math.round(multiplier * bounds.width)),
 						y: Math.max(1, Math.round(multiplier * bounds.height))
@@ -359,7 +356,7 @@
 				function checkPoint() {
 					var ballBounds = getElementBounds(ball);
 					
-					var paddles = [ paddleLeft, paddleTop, paddleRight, paddleBottom ];
+					var paddles = [ paddleLeft, paddleRight, paddleTop, paddleBottom ];
 					if (ballBounds.left <= 0) {
 						return handleWall(paddleLeft);
 					}
